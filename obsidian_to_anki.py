@@ -16,6 +16,8 @@ import socket
 import subprocess
 import logging
 import hashlib
+from urllib.parse import unquote
+
 try:
     import gooey
     GOOEY = True
@@ -286,13 +288,25 @@ class FormatConverter:
     CLOZE_UNSET_NUM = 1
 
     @staticmethod
-    def format_note_with_url(note, url):
-        for key in note["fields"]:
-            note["fields"][key] += "<br>" + "".join([
+    def format_note_with_url(note, url, link_text="Obsidian", target_field=None):
+        """Format the note with url if it exists."""
+        decoded_url = unquote(url) # Decode URL encoding
+        # Use regex to extract the file name without extension
+        match = re.search(r'([^/]+)\.md$', decoded_url)
+        link_text = match.group(1) if match else "Obsidian"
+
+        if target_field and target_field in note["fields"]:
+            note["fields"][target_field] += "" + "".join([
                 '<a',
-                ' href="{}" class="obsidian-link">Obsidian</a>'.format(url)
+                ' href="{}" class="obsidian-link">{}</a>'.format(url, link_text)
             ])
-            break  # So only does first field
+        else:
+            # Fall back to first field if target not specified or invalid
+            first_field = next(iter(note["fields"]))
+            note["fields"][first_field] += "" + "".join([
+                '<a',
+                ' href="{}" class="obsidian-link">{}</a>'.format(url, link_text)
+            ])
 
     @staticmethod
     def format_note_with_frozen_fields(note, frozen_fields_dict):
@@ -553,7 +567,7 @@ class Note:
         }
         return {key: value.strip() for key, value in fields.items()}
 
-    def parse(self, deck, url=None, frozen_fields_dict=None):
+    def parse(self, deck, url=None, frozen_fields_dict=None, url_field=None):
         """Get a properly formatted dictionary of the note."""
         template = NOTE_DICT_TEMPLATE.copy()
         template["modelName"] = self.note_type
@@ -563,7 +577,12 @@ class Note:
             CONFIG_DATA["Vault"],
             url
         ]):
-            FormatConverter.format_note_with_url(template, url)
+            # Extract filename without extension from url
+            FormatConverter.format_note_with_url(
+                template, 
+                url, 
+                target_field=url_field
+            )
         if frozen_fields_dict:
             FormatConverter.format_note_with_frozen_fields(
                 template, frozen_fields_dict
@@ -751,6 +770,9 @@ class Config:
             "Anki Path", ""
         )
         config["Defaults"].setdefault(
+            "Link Field", ""
+        )
+        config["Defaults"].setdefault(
             "Anki Profile", ""
         )
 
@@ -824,6 +846,7 @@ class Config:
         CONFIG_DATA["Comment"] = config.getboolean(
             "Defaults", "ID Comments"
         )
+        CONFIG_DATA["Link Field"] = config["Defaults"]["Link Field"]
         CONFIG_DATA["Path"] = config["Defaults"]["Anki Path"]
         CONFIG_DATA["Profile"] = config["Defaults"]["Anki Profile"]
         CONFIG_DATA["Vault"] = config["Obsidian"]["Vault name"]
