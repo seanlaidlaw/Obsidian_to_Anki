@@ -60,7 +60,7 @@ export class FileManager {
     requests_1_result: any
     added_media_set: Set<string>
 
-    constructor(app: App, data:ParsedSettings, files: TFile[], file_hashes: Record<string, string>, added_media: string[]) {
+    constructor(app: App, data: ParsedSettings, files: TFile[], file_hashes: Record<string, string>, added_media: string[]) {
         this.app = app
         this.data = data
 
@@ -74,7 +74,7 @@ export class FileManager {
         return "obsidian://open?vault=" + encodeURIComponent(this.data.vault_name) + String.raw`&file=` + encodeURIComponent(file.path)
     }
 
-    findFilesThatAreNotIgnored(files:TFile[], data:ParsedSettings):TFile[]{
+    findFilesThatAreNotIgnored(files: TFile[], data: ParsedSettings): TFile[] {
         let ignoredFiles = []
         ignoredFiles = multimatch(files.map(file => file.path), data.ignored_file_globs)
 
@@ -183,26 +183,31 @@ export class FileManager {
             temp.push(file.getAddNotes())
         }
         requests.push(AnkiConnect.multi(temp))
-        temp = []
-        console.info("Requesting card IDs of notes to be edited...")
-        for (let file of this.ownFiles) {
-            temp.push(file.getNoteInfo())
-        }
-        requests.push(AnkiConnect.multi(temp))
+
         temp = []
         console.info("Requesting tag list...")
         requests.push(AnkiConnect.getTags())
-        console.info("Requesting update of fields of existing notes")
-        for (let file of this.ownFiles) {
-            temp.push(file.getUpdateFields())
+
+        // Only request note info and updates if Update Existing Cards is enabled
+        if (this.data.update_existing) {
+            temp = []
+            console.info("Requesting card IDs of notes to be edited...")
+            for (let file of this.ownFiles) {
+                temp.push(file.getNoteInfo())
+            }
+            requests.push(AnkiConnect.multi(temp))
+            console.info("Requesting update of fields of existing notes")
+            for (let file of this.ownFiles) {
+                temp.push(file.getUpdateFields())
+            }
+            requests.push(AnkiConnect.multi(temp))
+            temp = []
+            console.info("Requesting deletion of notes..")
+            for (let file of this.ownFiles) {
+                temp.push(file.getDeleteNotes())
+            }
+            requests.push(AnkiConnect.multi(temp))
         }
-        requests.push(AnkiConnect.multi(temp))
-        temp = []
-        console.info("Requesting deletion of notes..")
-        for (let file of this.ownFiles) {
-            temp.push(file.getDeleteNotes())
-        }
-        requests.push(AnkiConnect.multi(temp))
         temp = []
         console.info("Requesting addition of media...")
         for (let file of this.ownFiles) {
@@ -214,7 +219,6 @@ export class FileManager {
                     console.warn("Couldn't locate media file ", mediaLink)
                 }
                 else {
-                    // Located successfully, so treat as if we've added the media
                     this.added_media_set.add(mediaLink)
                     const realPath = (this.app.vault.adapter as FileSystemAdapter).getFullPath(dataFile.path)
                     temp.push(
@@ -228,20 +232,19 @@ export class FileManager {
         }
         requests.push(AnkiConnect.multi(temp))
         temp = []
-        this.requests_1_result = ((await AnkiConnect.invoke('multi', {actions: requests}) as Array<Object>).slice(1) as any)
+        this.requests_1_result = ((await AnkiConnect.invoke('multi', { actions: requests }) as Array<Object>).slice(1) as any)
         await this.parse_requests_1()
     }
 
     async parse_requests_1() {
         const response = this.requests_1_result as Requests1Result
-        if (response[5].result.length >= 1 && response[5].result[0].error != null) {
-            new Notice("Please update AnkiConnect! The way the script has added media files has changed.")
-            console.warn("Please update AnkiConnect! The way the script has added media files has changed.")
-        }
+        const updateExistingCards = this.data.update_existing
+
+        // First response is always note additions
         let note_ids_array_by_file: Requests1Result[0]["result"]
         try {
             note_ids_array_by_file = AnkiConnect.parse(response[0])
-        } catch(error) {
+        } catch (error) {
             console.error("Error: ", error)
             note_ids_array_by_file = response[0].result
         }
@@ -253,7 +256,7 @@ export class FileManager {
             let file_response: addNoteResponse[]
             try {
                 file_response = AnkiConnect.parse(note_ids_array_by_file[i])
-            } catch(error) {
+            } catch (error) {
                 console.error("Error: ", error)
                 file_response = note_ids_array_by_file[i].result
             }
@@ -269,21 +272,31 @@ export class FileManager {
                 }
             }
         }
-        for (let index in note_info_array_by_file) {
-            let i: number = parseInt(index)
-            let file = this.ownFiles[i]
-            const file_response = AnkiConnect.parse(note_info_array_by_file[i])
-            let temp: number[] = []
-            for (let note_response of file_response) {
-                temp.push(...note_response.cards)
+
+        // Only process note info and updates if Update Existing Cards is enabled
+        if (updateExistingCards) {
+
+            // Process existing notes info and updates
+            for (let index in note_info_array_by_file) {
+                let i: number = parseInt(index)
+                let file = this.ownFiles[i]
+                const file_response = AnkiConnect.parse(note_info_array_by_file[i])
+                let temp: number[] = []
+                for (let note_response of file_response) {
+                    temp.push(...note_response.cards)
+                }
+                file.card_ids = temp
             }
-            file.card_ids = temp
         }
+
+        // Update files
         for (let index in this.ownFiles) {
             let i: number = parseInt(index)
             let ownFile = this.ownFiles[i]
             let obFile = this.files[i]
-            ownFile.tags = tag_list
+            if (updateExistingCards) {
+                ownFile.tags = tag_list
+            }
             ownFile.writeIDs()
             ownFile.removeEmpties()
             if (ownFile.file !== ownFile.original_file) {
@@ -304,27 +317,34 @@ export class FileManager {
     async requests_2(): Promise<void> {
         let requests: AnkiConnect.AnkiConnectRequest[] = []
         let temp: AnkiConnect.AnkiConnectRequest[] = []
-        console.info("Requesting cards to be moved to target deck...")
-        for (let file of this.ownFiles) {
-            temp.push(file.getChangeDecks())
-        }
-        requests.push(AnkiConnect.multi(temp))
-        temp = []
-        console.info("Requesting tags to be replaced...")
-        for (let file of this.ownFiles) {
-            let rem = file.getClearTags()
-            if(rem.params.notes.length) {
-                temp.push(rem)
+
+        // Only process deck changes and tag updates if Update Existing Cards is enabled
+        if (this.data.update_existing) {
+            console.info("Requesting cards to be moved to target deck...")
+            for (let file of this.ownFiles) {
+                temp.push(file.getChangeDecks())
             }
+            requests.push(AnkiConnect.multi(temp))
+            temp = []
+            console.info("Requesting tags to be replaced...")
+            for (let file of this.ownFiles) {
+                let rem = file.getClearTags()
+                if (rem.params.notes.length) {
+                    temp.push(rem)
+                }
+            }
+            requests.push(AnkiConnect.multi(temp))
+            temp = []
+            for (let file of this.ownFiles) {
+                temp.push(file.getAddTags())
+            }
+            requests.push(AnkiConnect.multi(temp))
+            temp = []
         }
-        requests.push(AnkiConnect.multi(temp))
-        temp = []
-        for (let file of this.ownFiles) {
-            temp.push(file.getAddTags())
+
+        if (requests.length > 0) {
+            await AnkiConnect.invoke('multi', { actions: requests })
         }
-        requests.push(AnkiConnect.multi(temp))
-        temp = []
-        await AnkiConnect.invoke('multi', {actions: requests})
         console.info("All done!")
     }
 

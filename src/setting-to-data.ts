@@ -25,7 +25,7 @@ export async function settingToData(app: App, settings: PluginSettings, fields_d
         },
         tags: [settings.Defaults.Tag]
     }
-    result.EXISTING_IDS = await AnkiConnect.invoke('findNotes', {query: ""}) as number[]
+    result.EXISTING_IDS = await AnkiConnect.invoke('findNotes', { query: "" }) as number[]
 
     //RegExp section
     result.FROZEN_REGEXP = new RegExp(escapeRegex(settings.Syntax["Frozen Fields Line"]) + String.raw` - (.*?):\n((?:[^\n][\n]?)+)`, "g")
@@ -39,6 +39,7 @@ export async function settingToData(app: App, settings: PluginSettings, fields_d
     result.curly_cloze = settings.Defaults.CurlyCloze
     result.highlights_to_cloze = settings.Defaults["CurlyCloze - Highlights to Clozes"]
     result.add_file_link = settings.Defaults["Add File Link"]
+    result.update_existing = settings.Defaults["Update Existing Cards"]
     result.comment = settings.Defaults["ID Comments"]
     result.add_context = settings.Defaults["Add Context"]
     result.add_obs_tags = settings.Defaults["Add Obsidian Tags"]

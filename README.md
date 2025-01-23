@@ -1,3 +1,13 @@
+# Fork of Obsidian_to_Anki
+
+This is a fork of the Obsidian_to_Anki Obsidian plugin. I have made the following changes:
+- Added setting to *not* update existing Anki cards, this stops the plugin from replacing changes made in Anki, and stops it moving cards back to Obsidian deck if they have been moved
+- Added setting to set the field of Anki card in which we want the link back to Obsidian note to be placed
+- replaced Obisidan link in Anki card with name of the note it came from
+
+
+Original Readme Below:
+
 # Obsidian_to_Anki
 Plugin to add flashcards from a text or markdown file to Anki. Run in Obsidian as a plugin, or from the command-line as a python script. Built with [Obsidian](https://obsidian.md/) markdown syntax in mind. Supports **user-defined custom syntax for flashcards.**  
 See the [Trello](https://trello.com/b/6MXEizGg/obsidiantoanki) for planned features.

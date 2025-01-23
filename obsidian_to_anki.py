@@ -589,6 +589,7 @@ class Note:
             )
         template["tags"] = template["tags"] + self.tags
         template["deckName"] = deck
+        template["update"] = CONFIG_DATA.get("Update Existing Cards", True)  # Default to True for backward compatibility
         return Note_and_id(note=template, id=self.identifier)
 
 
@@ -772,6 +773,7 @@ class Config:
         config["Defaults"].setdefault(
             "Link Field", ""
         )
+        config["Defaults"].setdefault("Update Existing Cards", "True")
         config["Defaults"].setdefault(
             "Anki Profile", ""
         )
@@ -852,6 +854,9 @@ class Config:
         CONFIG_DATA["Vault"] = config["Obsidian"]["Vault name"]
         CONFIG_DATA["Add file link"] = config.getboolean(
             "Obsidian", "Add file link"
+        )
+        CONFIG_DATA["Update Existing Cards"] = config.getboolean(
+            "Defaults", "Update Existing Cards"
         )
 
     def load_config():
